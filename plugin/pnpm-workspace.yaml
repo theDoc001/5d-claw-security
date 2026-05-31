@@ -1,0 +1,14 @@
+# pnpm 11+ moved build-script approvals from package.json into this file.
+# All packages listed below are trusted to run their postinstall build scripts.
+# Rationale per package:
+#   - @google/genai: Google generative AI client, comes with openclaw, trusted upstream
+#   - esbuild: standard JS bundler used by openclaw plugin tooling, trusted
+#   - openclaw: the platform we're a plugin for, trusted
+#   - protobufjs: gRPC/protobuf parsing used by openclaw, trusted
+#   - tree-sitter-bash: bash syntax parser used by openclaw command analysis, trusted
+allowBuilds:
+  "@google/genai": true
+  esbuild: true
+  openclaw: true
+  protobufjs: true
+  tree-sitter-bash: true

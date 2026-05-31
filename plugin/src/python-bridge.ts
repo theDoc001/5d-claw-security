@@ -162,15 +162,28 @@ export class PythonBridge {
           signal,
           stopped: this.stopped
         });
-        this.failAllPending(
-          new PythonBridgeError(
-            "subprocess_exited",
-            `fivedrisk gateway exited (code=${code}, signal=${signal})`
-          )
-        );
-        this.child = null;
-        this.stdoutReader?.close();
-        this.stdoutReader = null;
+        // Only mutate bridge-level state if this exit belongs to the child
+        // currently owned by the bridge. A delayed exit from a previously
+        // killed subprocess (common during restart) must not clobber the
+        // freshly spawned child or close its readline reader. Pending calls
+        // are tied to whichever child was live when they were issued, so
+        // failing them is only correct for the current child.
+        if (this.child === child) {
+          this.failAllPending(
+            new PythonBridgeError(
+              "subprocess_exited",
+              `fivedrisk gateway exited (code=${code}, signal=${signal})`
+            )
+          );
+          this.child = null;
+          if (this.stdoutReader === reader) {
+            this.stdoutReader.close();
+            this.stdoutReader = null;
+          }
+        } else {
+          // Stale exit from a prior child; close just that child's reader.
+          reader.close();
+        }
         if (!started) {
           reject(
             new PythonBridgeError(
