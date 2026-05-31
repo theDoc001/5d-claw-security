@@ -16,20 +16,23 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
-    "types": ["node"]
+    "types": ["node"],
+    "outDir": "./dist",
+    "rootDir": ".",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   },
   "include": [
     "index.ts",
     "api.ts",
-    "src/**/*.ts",
-    "test/**/*.ts"
+    "src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "test"
   ]
 }

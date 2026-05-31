@@ -26,7 +26,7 @@ describe("decision-mapper", () => {
     expect(result).toMatchInlineSnapshot(`undefined`);
   });
 
-  it("YELLOW maps to pass with metadata", () => {
+  it("YELLOW maps to pass-through (undefined); band metadata lives in the audit log", () => {
     const result = mapToResult(
       decision({
         band: "YELLOW",
@@ -37,22 +37,10 @@ describe("decision-mapper", () => {
       }),
       cfg
     );
-    expect(result).toMatchInlineSnapshot(`
-      {
-        "metadata": {
-          "fivedrisk": {
-            "band": "YELLOW",
-            "decision_id": "dec-yellow-1",
-            "reason": "argument contains base64-looking blob",
-            "worst_dim": "D",
-            "worst_score": 2,
-          },
-        },
-      }
-    `);
+    expect(result).toMatchInlineSnapshot(`undefined`);
   });
 
-  it("ORANGE maps to requireApproval with prompt", () => {
+  it("ORANGE maps to requireApproval object with title + description + severity", () => {
     const result = mapToResult(
       decision({
         band: "ORANGE",
@@ -66,17 +54,11 @@ describe("decision-mapper", () => {
     );
     expect(result).toMatchInlineSnapshot(`
       {
-        "approvalPrompt": "Approve delete of 12 records?",
-        "metadata": {
-          "fivedrisk": {
-            "band": "ORANGE",
-            "decision_id": "dec-orange-1",
-            "reason": "irreversible delete to user data",
-            "worst_dim": "R",
-            "worst_score": 3,
-          },
+        "requireApproval": {
+          "description": "Approve delete of 12 records?",
+          "severity": "warning",
+          "title": "5D ORANGE: R score=3",
         },
-        "requireApproval": true,
       }
     `);
   });
@@ -96,20 +78,11 @@ describe("decision-mapper", () => {
       {
         "block": true,
         "blockReason": "5D RED: dim=T score=4 reason=write to /etc/shadow",
-        "metadata": {
-          "fivedrisk": {
-            "band": "RED",
-            "decision_id": "dec-red-1",
-            "reason": "write to /etc/shadow",
-            "worst_dim": "T",
-            "worst_score": 4,
-          },
-        },
       }
     `);
   });
 
-  it("ORANGE falls back to a generated prompt when none supplied", () => {
+  it("ORANGE falls back to a generated description when no approval_prompt supplied", () => {
     const result = mapToResult(
       decision({
         band: "ORANGE",
@@ -120,10 +93,11 @@ describe("decision-mapper", () => {
       }),
       cfg
     );
-    expect(result?.approvalPrompt).toBe(
+    expect(result?.requireApproval?.description).toBe(
       "5D ORANGE: dim=A score=3 reason=autonomy spike (approve to proceed)"
     );
-    expect(result?.requireApproval).toBe(true);
+    expect(result?.requireApproval?.title).toBe("5D ORANGE: A score=3");
+    expect(result?.requireApproval?.severity).toBe("warning");
   });
 
   it("formatBandPrefix renders dim/score/reason in the expected shape", () => {

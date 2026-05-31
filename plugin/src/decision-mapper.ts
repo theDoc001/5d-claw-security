@@ -1,36 +1,74 @@
 /**
  * Pure mapping from BandDecision -> BeforeToolCallResult.
  *
- * Keeps the band-to-action contract isolated and snapshot-testable. The
- * BeforeToolCallResult shape is duck-typed here (not imported from the
- * openclaw peer dependency) so the mapper is unit-testable in isolation.
- * index.ts narrows this to the actual SDK type at the hook boundary.
+ * The shapes mirror the real OpenClaw SDK types
+ * (`PluginHookBeforeToolCallEvent`, `PluginHookBeforeToolCallResult`,
+ * `PluginHookToolContext`) but are declared locally because OpenClaw does
+ * not re-export those names from `openclaw/plugin-sdk` directly; the typed
+ * `api.on("before_tool_call", handler, ...)` registration site checks
+ * assignability against the SDK's internal `PluginHookHandlerMap`.
+ *
+ * Keeping these as exported local type aliases lets the mapper be unit
+ * tested in isolation and lets index.ts narrow the handler signature
+ * without reaching into deep SDK internals.
  *
  * Band contract (per spec §6 P-1):
  *   GREEN  -> pass (undefined)
- *   YELLOW -> pass with metadata
- *   ORANGE -> requireApproval with approval_prompt
- *   RED    -> block with blockReason
+ *   YELLOW -> pass (undefined); band detail recorded via logger
+ *   ORANGE -> requireApproval object with title + description + severity
+ *   RED    -> block with formatted blockReason
  */
 
-import type { BandDecision, PluginConfig } from "../api.ts";
+import type { BandDecision, PluginConfig } from "../api.js";
 
 /**
- * BeforeToolCallResult, structurally typed. The OpenClaw SDK type is wider;
- * we only return the subset we use. Returning `undefined` (or omitting the
- * return entirely) is the pass-through signal in OpenClaw.
+ * Mirror of OpenClaw `PluginHookBeforeToolCallEvent`. The host populates more
+ * fields than we need; we only depend on these.
  */
-export interface BeforeToolCallResult {
-  block?: boolean;
-  blockReason?: string;
-  requireApproval?: boolean;
-  approvalPrompt?: string;
-  metadata?: Record<string, unknown>;
+export interface BeforeToolCallEvent {
+  readonly toolName: string;
+  readonly params: Record<string, unknown>;
+  readonly toolKind?: string;
+  readonly toolInputKind?: string;
+  readonly runId?: string;
+  readonly toolCallId?: string;
+  readonly derivedPaths?: readonly string[];
 }
 
 /**
- * Format a blockReason or approvalPrompt prefix. Includes dim+score so the
- * operator sees, in one line, which dimension drove the decision.
+ * Mirror of OpenClaw `PluginHookToolContext`. The trace context exposes
+ * `traceId` (W3C trace id) which we propagate into the fivedrisk audit log.
+ */
+export interface BeforeToolCallContext {
+  readonly agentId?: string;
+  readonly sessionKey?: string;
+  readonly sessionId?: string;
+  readonly runId?: string;
+  readonly trace?: { readonly traceId: string };
+  readonly toolName: string;
+  readonly toolCallId?: string;
+  readonly channelId?: string;
+}
+
+/**
+ * Mirror of OpenClaw `PluginHookBeforeToolCallResult`. We use the subset of
+ * fields the band contract needs: `params` (unused here), `block`,
+ * `blockReason`, and `requireApproval` (the structured object form).
+ */
+export interface BeforeToolCallResult {
+  params?: Record<string, unknown>;
+  block?: boolean;
+  blockReason?: string;
+  requireApproval?: {
+    title: string;
+    description: string;
+    severity?: "info" | "warning" | "critical";
+  };
+}
+
+/**
+ * Format a blockReason or approval description prefix. Includes dim+score so
+ * the operator sees, in one line, which dimension drove the decision.
  *
  * Example: "5D RED: dim=T score=4 reason=write to /etc/shadow"
  */
@@ -51,55 +89,35 @@ export function mapToResult(
 ): BeforeToolCallResult | undefined {
   switch (decision.band) {
     case "GREEN": {
-      // Pass through with no metadata. Smallest possible footprint on the hot path.
+      // Pass through. Smallest possible footprint on the hot path.
       return undefined;
     }
     case "YELLOW": {
-      // Pass, but attach scoring metadata so downstream plugins and audit
-      // surfaces can see we ran. Per spec §6 P-1 "pass with metadata".
-      return {
-        metadata: {
-          fivedrisk: {
-            band: decision.band,
-            decision_id: decision.decision_id,
-            worst_dim: decision.worst_dim,
-            worst_score: decision.worst_score,
-            reason: decision.reason
-          }
-        }
-      };
+      // Pass through. The OpenClaw result envelope has no metadata slot, so
+      // band/decision_id detail rides the audit log emitted by the structured
+      // logger upstream of this mapper. Per spec §6 P-1 this is still a
+      // "pass with metadata" outcome because the metadata is captured in the
+      // audit trail; we just don't redirect it through the host result.
+      return undefined;
     }
     case "ORANGE": {
-      // Ask OpenClaw's native channel flow to surface an approval prompt.
+      const description =
+        decision.approval_prompt ??
+        formatBandPrefix(decision) + " (approve to proceed)";
       return {
-        requireApproval: true,
-        approvalPrompt:
-          decision.approval_prompt ??
-          formatBandPrefix(decision) + " (approve to proceed)",
-        metadata: {
-          fivedrisk: {
-            band: decision.band,
-            decision_id: decision.decision_id,
-            worst_dim: decision.worst_dim,
-            worst_score: decision.worst_score,
-            reason: decision.reason
-          }
+        requireApproval: {
+          title: `5D ORANGE: ${decision.worst_dim ?? "?"} score=${
+            decision.worst_score ?? "?"
+          }`,
+          description,
+          severity: "warning"
         }
       };
     }
     case "RED": {
       return {
         block: true,
-        blockReason: formatBandPrefix(decision),
-        metadata: {
-          fivedrisk: {
-            band: decision.band,
-            decision_id: decision.decision_id,
-            worst_dim: decision.worst_dim,
-            worst_score: decision.worst_score,
-            reason: decision.reason
-          }
-        }
+        blockReason: formatBandPrefix(decision)
       };
     }
     default: {

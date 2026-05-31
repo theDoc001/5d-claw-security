@@ -12,23 +12,30 @@
  *   2. on failure: warn, restart subprocess, retry once
  *   3. on second failure: return per onError (block by default)
  * No user prompt is ever surfaced for a subprocess issue.
+ *
+ * Lifecycle is wired via the typed `gateway_start` and `gateway_stop` hooks
+ * so the Python subprocess is pre-warmed at Gateway startup and shut down
+ * cleanly on Gateway stop.
  */
 
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 
 import type {
   PluginConfig,
   ScoreRequest
-} from "./api.ts";
+} from "./api.js";
 import {
   mapToResult,
-  type BeforeToolCallResult
-} from "./src/decision-mapper.ts";
-import { PythonBridge } from "./src/python-bridge.ts";
+  type BeforeToolCallResult,
+  type BeforeToolCallEvent,
+  type BeforeToolCallContext
+} from "./src/decision-mapper.js";
+import { PythonBridge } from "./src/python-bridge.js";
 import {
   StructuredLogger,
   type ApiLogger
-} from "./src/logger.ts";
+} from "./src/logger.js";
 
 /**
  * Hook priority. OpenClaw runs handlers in descending priority order, so 70
@@ -65,37 +72,26 @@ function normaliseConfig(raw: unknown): PluginConfig {
 }
 
 /**
- * Hook-event shape we depend on. OpenClaw supplies more fields; we only use
- * these. Duck-typed so the plugin compiles against any minor version of the
- * SDK that preserves these names.
- */
-interface BeforeToolCallEvent {
-  readonly toolName: string;
-  readonly toolArgs?: Record<string, unknown>;
-}
-
-interface BeforeToolCallContext {
-  readonly traceId?: string;
-  readonly runId?: string;
-  readonly sessionId?: string;
-  readonly agentContext?: Record<string, unknown>;
-}
-
-/**
  * Build the score request from the OpenClaw event + context. Trace fields are
  * propagated so the fivedrisk audit log can join with OpenClaw runs.
+ *
+ * The OpenClaw `before_tool_call` event surfaces tool arguments under
+ * `event.params`; the fivedrisk wire contract uses `toolArgs`, so we adapt
+ * field names at this boundary.
  */
 function buildRequest(
   event: BeforeToolCallEvent,
   ctx: BeforeToolCallContext
 ): ScoreRequest {
+  // exactOptionalPropertyTypes: omit undefined-valued optional props rather
+  // than assigning `undefined` to a `string`-typed optional.
+  const traceId = ctx.trace?.traceId;
   return {
-    traceId: ctx.traceId,
-    runId: ctx.runId,
-    sessionId: ctx.sessionId,
     toolName: event.toolName,
-    toolArgs: event.toolArgs ?? {},
-    agentContext: ctx.agentContext
+    toolArgs: event.params ?? {},
+    ...(traceId !== undefined && { traceId }),
+    ...(ctx.runId !== undefined && { runId: ctx.runId }),
+    ...(ctx.sessionId !== undefined && { sessionId: ctx.sessionId })
   };
 }
 
@@ -114,7 +110,7 @@ export async function handleBeforeToolCall(
   const childLog = logger.child({
     sessionId: ctx.sessionId,
     runId: ctx.runId,
-    traceId: ctx.traceId,
+    traceId: ctx.trace?.traceId,
     toolName: event.toolName
   });
 
@@ -158,54 +154,54 @@ export async function handleBeforeToolCall(
   }
 }
 
-export default definePluginEntry((api: {
-  readonly logger: ApiLogger;
-  readonly config: unknown;
-  on(
-    hook: "before_tool_call",
-    handler: (
-      event: BeforeToolCallEvent,
-      ctx: BeforeToolCallContext
-    ) => Promise<BeforeToolCallResult | undefined>,
-    options: { priority: number }
-  ): void;
-  onActivate(handler: () => Promise<void>): void;
-  onDeactivate(handler: () => Promise<void>): void;
-}) => {
-  const cfg = normaliseConfig(api.config);
-  const logger = new StructuredLogger(api.logger);
-  const bridge = new PythonBridge({ config: cfg, logger });
+export default definePluginEntry({
+  id: "fivedrisk-claw-security",
+  name: "5D Claw Security",
+  description:
+    "Deterministic per-action policy gate. Scores every tool call on five dimensions (Data, Tool, Reversibility, External, Autonomy), bands GREEN/YELLOW/ORANGE/RED, blocks RED, requests approval on ORANGE, passes GREEN/YELLOW. Bridges to the fivedrisk Python core via persistent stdio.",
+  register: (api: OpenClawPluginApi) => {
+    const cfg = normaliseConfig(api.pluginConfig);
+    const logger = new StructuredLogger(api.logger as ApiLogger);
+    const bridge = new PythonBridge({ config: cfg, logger });
 
-  // Pre-warm the subprocess on activation per spec §8.1, so the first hook
-  // call does not pay the Python startup cost.
-  api.onActivate(async () => {
-    logger.info("5D Claw Security activating", {
-      policyPath: cfg.policyPath,
-      pythonBin: cfg.pythonBin,
-      onError: cfg.onError,
-      scoringTimeoutMs: cfg.scoringTimeoutMs,
-      hookPriority: HOOK_PRIORITY
-    });
-    try {
-      await bridge.start();
-      logger.info("5D Claw Security ready");
-    } catch (err) {
-      // Per spec §8.2.1 we never block activation on a Python failure; the
-      // hook handler will retry on first call. Log and continue.
-      logger.error("5D Claw Security failed to pre-warm fivedrisk core", {
-        err: (err as Error).message
+    // Pre-warm the subprocess at Gateway start per spec §8.1, so the first
+    // hook call does not pay the Python startup cost.
+    api.on("gateway_start", async () => {
+      logger.info("5D Claw Security activating", {
+        policyPath: cfg.policyPath,
+        pythonBin: cfg.pythonBin,
+        onError: cfg.onError,
+        scoringTimeoutMs: cfg.scoringTimeoutMs,
+        hookPriority: HOOK_PRIORITY
       });
-    }
-  });
+      try {
+        await bridge.start();
+        logger.info("5D Claw Security ready");
+      } catch (err) {
+        // Per spec §8.2.1 we never block activation on a Python failure; the
+        // hook handler will retry on first call. Log and continue.
+        logger.error("5D Claw Security failed to pre-warm fivedrisk core", {
+          err: (err as Error).message
+        });
+      }
+    });
 
-  api.onDeactivate(async () => {
-    logger.info("5D Claw Security deactivating");
-    await bridge.stop();
-  });
+    api.on("gateway_stop", async () => {
+      logger.info("5D Claw Security deactivating");
+      await bridge.stop();
+    });
 
-  api.on(
-    "before_tool_call",
-    (event, ctx) => handleBeforeToolCall(bridge, logger, cfg, event, ctx),
-    { priority: HOOK_PRIORITY }
-  );
+    api.on(
+      "before_tool_call",
+      (event, ctx) =>
+        handleBeforeToolCall(
+          bridge,
+          logger,
+          cfg,
+          event as BeforeToolCallEvent,
+          ctx as BeforeToolCallContext
+        ),
+      { priority: HOOK_PRIORITY }
+    );
+  }
 });
