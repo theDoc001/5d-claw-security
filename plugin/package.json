@@ -1,0 +1,59 @@
+{
+  "name": "@theDoc001/5d-claw-security",
+  "version": "0.1.0",
+  "description": "Deterministic per-action policy gate for OpenClaw agents. Registers before_tool_call at priority 70 and bridges to the fivedrisk Python core via persistent stdio.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "theDoc001",
+  "homepage": "https://github.com/theDoc001/5d-claw-security",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/theDoc001/5d-claw-security.git"
+  },
+  "bugs": {
+    "url": "https://github.com/theDoc001/5d-claw-security/issues"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "fivedrisk",
+    "policy",
+    "governance",
+    "audit",
+    "agent-safety"
+  ],
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "api.ts",
+    "src/",
+    "openclaw.plugin.json",
+    "tsconfig.json",
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.28"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

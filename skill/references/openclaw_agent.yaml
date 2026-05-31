@@ -1,0 +1,147 @@
+# fivedrisk preset: openclaw_agent (bundled with 5D Claw Security skill v0.1.0)
+#
+# Tuned for OpenClaw agents in auto mode. Covers Bash, Edit, Write,
+# WebFetch, and the common MCP tool shapes. Layers cleanly on top of
+# fivedrisk's injection scanner.
+#
+# Failure modes this preset targets:
+#   - ClickFix-style destructive commands (rm -rf, dd, mkfs, kubectl delete)
+#   - base64-paste obfuscation feeding shell pipelines (curl|sh)
+#   - persistent-memory exfiltration via WebFetch with POST/PUT bodies
+#   - typosquat installs via pip/npm
+#
+# The 5D Claw Security skill copies this file to ~/.fivedrisk/policy.yaml
+# (or wherever FIVEDRISK_POLICY_PATH points) at install time, then tunes
+# it based on what the scan found on disk.
+#
+# When the corresponding L-2 work lands in the fivedrisk Python library
+# (next library release), this file will be superseded by the
+# library-shipped preset at fivedrisk/policies/presets/openclaw_agent.yaml
+# and the skill's generate-policy.py will load from there instead.
+
+version: "0.2.0"
+
+bands:
+  yellow_score: 0.9
+  orange_score: 1.5
+  red_score: 2.2
+
+thresholds:
+  red_threshold: 4
+  orange_threshold: 3
+
+enable_yellow_band: true
+
+# Reversibility and tool-privilege carry the most weight. OpenClaw auto
+# mode already screens obvious-bad on those axes via LLM review; this
+# preset catches them deterministically first.
+weights:
+  data_sensitivity: 1.0
+  tool_privilege: 1.4
+  reversibility: 1.8
+  external_impact: 1.2
+  autonomy_context: 0.9
+
+# OpenClaw built-ins. MCP tools (named per server) get tool_defaults
+# added by the generator based on the scan.
+tool_defaults:
+  Read:
+    tool_privilege: 0
+    reversibility: 0
+    external_impact: 0
+  Glob:
+    tool_privilege: 0
+    reversibility: 0
+    external_impact: 0
+  Grep:
+    tool_privilege: 0
+    reversibility: 0
+    external_impact: 0
+  Edit:
+    tool_privilege: 2
+    reversibility: 2
+    external_impact: 0
+  Write:
+    tool_privilege: 2
+    reversibility: 2
+    external_impact: 0
+  Bash:
+    tool_privilege: 3
+    reversibility: 3
+    external_impact: 2
+  WebFetch:
+    tool_privilege: 2
+    reversibility: 1
+    external_impact: 2
+
+# Bash overrides: ClickFix and supply-chain shapes get scored RED before
+# the subprocess starts.
+bash_overrides:
+  "rm -rf":
+    tool_privilege: 4
+    reversibility: 4
+  "rm -fr":
+    tool_privilege: 4
+    reversibility: 4
+  "curl.*\\|.*sh":
+    tool_privilege: 4
+    external_impact: 3
+    reversibility: 3
+  "wget.*\\|.*sh":
+    tool_privilege: 4
+    external_impact: 3
+    reversibility: 3
+  "git push --force":
+    tool_privilege: 3
+    reversibility: 4
+  "git reset --hard":
+    tool_privilege: 2
+    reversibility: 3
+  "docker":
+    tool_privilege: 3
+    reversibility: 2
+  "pip install":
+    tool_privilege: 2
+    reversibility: 1
+  "npm install":
+    tool_privilege: 2
+    reversibility: 1
+  "curl.*POST":
+    tool_privilege: 2
+    external_impact: 3
+  "curl.*PUT":
+    tool_privilege: 2
+    external_impact: 3
+  "sudo":
+    tool_privilege: 4
+    reversibility: 3
+  "chmod":
+    tool_privilege: 2
+    reversibility: 2
+  "chown":
+    tool_privilege: 2
+    reversibility: 2
+  "kubectl apply":
+    tool_privilege: 3
+    reversibility: 3
+  "kubectl delete":
+    tool_privilege: 4
+    reversibility: 4
+  "terraform apply":
+    tool_privilege: 3
+    reversibility: 3
+  "terraform destroy":
+    tool_privilege: 4
+    reversibility: 4
+  "dd if=":
+    tool_privilege: 4
+    reversibility: 4
+  "mkfs":
+    tool_privilege: 4
+    reversibility: 4
+  ">/dev/sd":
+    tool_privilege: 4
+    reversibility: 4
+  "base64 -d":
+    tool_privilege: 2
+    external_impact: 2
