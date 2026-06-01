@@ -98,6 +98,12 @@ function buildRequest(
 /**
  * Per spec §8.2.1, this is the canonical self-recovery loop. Kept small,
  * exported for testing in unit suites that exercise the restart path.
+ *
+ * Calls `bridge.start()` first as a backstop for non-gateway runs (e.g.
+ * `openclaw run <prompt>` one-shot CLI) where `gateway_start` never fires
+ * and the pre-warm in register() never ran. `PythonBridge.start()` is
+ * idempotent: it returns early if a child is already alive, and concurrent
+ * callers await the in-progress startup promise.
  */
 export async function handleBeforeToolCall(
   bridge: PythonBridge,
@@ -115,6 +121,7 @@ export async function handleBeforeToolCall(
   });
 
   try {
+    await bridge.start();
     const decision = await bridge.score(request);
     childLog.debug("fivedrisk decision", {
       band: decision.band,
@@ -160,6 +167,11 @@ export default definePluginEntry({
   description:
     "Deterministic per-action policy gate. Scores every tool call on five dimensions (Data, Tool, Reversibility, External, Autonomy), bands GREEN/YELLOW/ORANGE/RED, blocks RED, requests approval on ORANGE, passes GREEN/YELLOW. Bridges to the fivedrisk Python core via persistent stdio.",
   register: (api: OpenClawPluginApi) => {
+    // `api.pluginConfig` is the OpenClaw SDK's contract for per-plugin
+    // configuration; see `OpenClawPluginApi.pluginConfig?: Record<string, unknown>`
+    // in node_modules/openclaw/dist/plugin-sdk/src/plugins/types.d.ts. The
+    // sibling `api.config` is the full OpenClawConfig and is not the right
+    // surface for plugin-scoped settings.
     const cfg = normaliseConfig(api.pluginConfig);
     const logger = new StructuredLogger(api.logger as ApiLogger);
     const bridge = new PythonBridge({ config: cfg, logger });
