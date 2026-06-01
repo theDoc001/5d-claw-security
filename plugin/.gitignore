@@ -1,0 +1,4 @@
+
+# Vitest temp files
+_tmp_*
+vitest.config.ts.timestamp-*.mjs

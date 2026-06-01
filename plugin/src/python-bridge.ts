@@ -21,8 +21,8 @@ import type {
   ScoreRequest,
   ScoreResponse,
   BandDecision
-} from "../api.ts";
-import type { StructuredLogger } from "./logger.ts";
+} from "../api.js";
+import type { StructuredLogger } from "./logger.js";
 
 /**
  * Minimal child_process surface we depend on. Defined here so tests can
