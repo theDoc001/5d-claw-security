@@ -1,4 +1,4 @@
-# CLAUDE.md: @theDoc001/5d-claw-security
+# CLAUDE.md: @thedoc001/5d-claw-security
 
 Instructions for Claude-based OpenClaw agents installing and operating this plugin.
 

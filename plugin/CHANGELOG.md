@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@theDoc001/5d-claw-security` are documented in this file.
+All notable changes to `@thedoc001/5d-claw-security` are documented in this file.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 

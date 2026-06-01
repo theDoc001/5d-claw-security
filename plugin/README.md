@@ -1,4 +1,4 @@
-# @theDoc001/5d-claw-security
+# @thedoc001/5d-claw-security
 
 The deterministic per-action policy gate for OpenClaw agents.
 

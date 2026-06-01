@@ -1,5 +1,5 @@
 {
-  "name": "@theDoc001/5d-claw-security",
+  "name": "@thedoc001/5d-claw-security",
   "version": "0.1.0",
   "description": "Deterministic per-action policy gate for OpenClaw agents. Registers before_tool_call at priority 70 and bridges to the fivedrisk Python core via persistent stdio.",
   "type": "module",

@@ -36,7 +36,7 @@ After the skill runs end to end, the operator has:
 - `~/.fivedrisk/policy.yaml` (personalized from the bundled `openclaw_agent`
   preset, plus tuning for what was actually detected on disk)
 - `fivedrisk` installed in the operator's Python environment
-- The `@theDoc001/5d-claw-security` OpenClaw plugin installed and configured
+- The `@thedoc001/5d-claw-security` OpenClaw plugin installed and configured
 - The plugin gating every `before_tool_call` from then on
 
 ## Why this skill exists

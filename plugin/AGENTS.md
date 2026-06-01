@@ -1,4 +1,4 @@
-# AGENTS.md: @theDoc001/5d-claw-security
+# AGENTS.md: @thedoc001/5d-claw-security
 
 Machine-readable contract for OpenClaw agents that install, configure, or operate this plugin.
 
@@ -6,7 +6,7 @@ Machine-readable contract for OpenClaw agents that install, configure, or operat
 
 ```
 plugin_id:        fivedrisk-claw-security
-package_name:     @theDoc001/5d-claw-security
+package_name:     @thedoc001/5d-claw-security
 clawhub_slug:     5d-claw-security
 hook:             before_tool_call
 hook_priority:    70
